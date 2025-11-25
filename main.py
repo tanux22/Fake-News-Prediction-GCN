@@ -1,4 +1,3 @@
-# full_fakenews_gnn.py
 import os
 import pandas as pd
 import numpy as np
@@ -23,7 +22,6 @@ def load_minimal_fakenewsnet(fake_path: str, real_path: str) -> pd.DataFrame:
     return df
 
 def extract_tweet_ids(cell) -> List[str]:
-    """Cell contains tweet ids separated by whitespace or tabs. Return list of strings."""
     if isinstance(cell, str) and cell.strip() != "":
         # split on any whitespace (spaces, tabs)
         return [t.strip() for t in cell.strip().split()]
@@ -45,14 +43,7 @@ def preprocess_title_spacy(title: str) -> str:
     ]
     return ' '.join(tokens)
 
-# ---------- Graph construction ----------
 def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, dict]:
-    """
-    Build a heterogeneous-style bipartite graph (but stored as a single graph):
-      - news nodes first (0..Nnews-1)
-      - tweet nodes after (Nnews..Nnews+Ntweets-1)
-    Returns PyG Data object and an index mapping dict.
-    """
     # Preprocess titles
     df['preprocessed_title'] = df['title'].apply(preprocess_title_spacy)
     # Parse tweet ids
@@ -121,12 +112,7 @@ def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, d
     index_maps = {'news2idx': news2idx, 'tweet2idx': tweet2idx, 'news_nodes': news_nodes, 'tweet_nodes': tweet_nodes, 'vectorizer': vectorizer}
     return data, index_maps
 
-# ---------- Masks: train/val/test for news nodes only ----------
 def build_masks_for_news_nodes(data: Data, n_news: int, train_ratio: float = 0.7, val_ratio: float = 0.15, random_seed: int = 42):
-    """
-    Create boolean masks (torch.BoolTensor) for nodes corresponding to news (first n_news indices).
-    Tweets are excluded (masks False).
-    """
     rng = np.random.RandomState(random_seed)
     news_indices = np.arange(n_news)
     train_idx, test_idx = train_test_split(news_indices, train_size=train_ratio, random_state=random_seed, stratify=None)
@@ -151,7 +137,6 @@ def build_masks_for_news_nodes(data: Data, n_news: int, train_ratio: float = 0.7
 
     return mask_train, mask_val, mask_test
 
-# ---------- Models: GCN and GAT ----------
 class GCN(torch.nn.Module):
     def __init__(self, in_channels: int, hidden_channels: int, out_channels: int, dropout: float = 0.5):
         super().__init__()
@@ -180,7 +165,6 @@ class GAT(torch.nn.Module):
         x = self.gat2(x, edge_index)
         return x
 
-# ---------- Training loop ----------
 def train(model, data, mask_train, optimizer, criterion, device):
     model.train()
     optimizer.zero_grad()
@@ -257,4 +241,4 @@ def run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, m
 if __name__ == "__main__":
     fake_csv = "dataset/politifact_fake.csv"
     real_csv = "dataset/politifact_real.csv"
-    model, data, maps = run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, model_type='gcn', device_str='cpu')
+    model, data, maps = run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, model_type='gat', device_str='cpu')
