@@ -11,23 +11,19 @@ from sklearn.metrics import accuracy_score, f1_score
 import spacy
 from typing import List, Tuple
 
-# ---------- Utilities: CSV parsing & preprocessing ----------
 def load_minimal_fakenewsnet(fake_path: str, real_path: str) -> pd.DataFrame:
     fake_df = pd.read_csv(fake_path, header=0)
     real_df = pd.read_csv(real_path, header=0)
     fake_df['label'] = 0
     real_df['label'] = 1
     df = pd.concat([fake_df, real_df], ignore_index=True)
-    # Normalize column names if necessary: ensure 'id', 'title', 'tweet_ids', 'label'
     return df
 
 def extract_tweet_ids(cell) -> List[str]:
     if isinstance(cell, str) and cell.strip() != "":
-        # split on any whitespace (spaces, tabs)
         return [t.strip() for t in cell.strip().split()]
     return []
 
-# Preprocess titles using spaCy as in your snippet
 nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
 
 def preprocess_title_spacy(title: str) -> str:
@@ -44,14 +40,10 @@ def preprocess_title_spacy(title: str) -> str:
     return ' '.join(tokens)
 
 def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, dict]:
-    # Preprocess titles
     df['preprocessed_title'] = df['title'].apply(preprocess_title_spacy)
-    # Parse tweet ids
     df['tweet_ids_list'] = df['tweet_ids'].apply(extract_tweet_ids)
 
-    # Nodes lists
     news_nodes = list(df['id'].astype(str))
-    # collect unique tweets
     tweet_nodes = sorted({t for lst in df['tweet_ids_list'] for t in lst})
 
     n_news = len(news_nodes)
@@ -61,7 +53,7 @@ def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, d
     news2idx = {nid: i for i, nid in enumerate(news_nodes)}
     tweet2idx = {tid: i + n_news for i, tid in enumerate(tweet_nodes)}  # offset
 
-    # Build edge lists (tweet -> news when tweet shared news)
+    # Build edge lists
     edges_src = []
     edges_dst = []
     for _, row in df.iterrows():
@@ -79,15 +71,12 @@ def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, d
 
     # Build node features:
     #  - News: TF-IDF from preprocessed_title -> size tfidf_dim
-    #  - Tweets: zero vector (we don't have tweet text), or could be average of words if text available
+    #  - Tweets: zero vector
     vectorizer = TfidfVectorizer(max_features=tfidf_dim)
-    # Fit only on news preprocessed titles
+
     X_news = vectorizer.fit_transform(df['preprocessed_title'].fillna("")).toarray()  # shape (n_news, tfidf_dim)
 
-    # Tweets placeholder features: zeros
     X_tweets = np.zeros((n_tweets, tfidf_dim), dtype=np.float32)
-
-    # Stack
     X_all = np.vstack([X_news.astype(np.float32), X_tweets])
 
     # Labels: create label vector sized num_nodes. We have labels only for news nodes; tweets get -1 (ignored)
@@ -97,7 +86,6 @@ def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, d
     for nid, idx in news2idx.items():
         labels_full[idx] = id_to_label[nid]
 
-    # Create PyG Data
     data = Data(
         x=torch.tensor(X_all),
         edge_index=edge_index,
@@ -105,7 +93,6 @@ def build_graph_from_df(df: pd.DataFrame, tfidf_dim: int = 512) -> Tuple[Data, d
     )
     data.num_nodes = X_all.shape[0]
 
-    # Optional: edge weights = 1.0
     edge_weight = torch.ones(edge_index.shape[1], dtype=torch.float)
     data.edge_weight = edge_weight
 
@@ -116,10 +103,7 @@ def build_masks_for_news_nodes(data: Data, n_news: int, train_ratio: float = 0.7
     rng = np.random.RandomState(random_seed)
     news_indices = np.arange(n_news)
     train_idx, test_idx = train_test_split(news_indices, train_size=train_ratio, random_state=random_seed, stratify=None)
-    # Split test_idx further into val and test per val_ratio relative to full
-    # compute sizes
     remaining = len(test_idx)
-    # compute val size as an absolute number:
     val_size = int(len(news_indices) * val_ratio)
     if val_size > 0:
         val_idx = test_idx[:val_size]
