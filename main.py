@@ -257,4 +257,4 @@ def run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, m
 if __name__ == "__main__":
     fake_csv = "dataset/politifact_fake.csv"
     real_csv = "dataset/politifact_real.csv"
-    model, data, maps = run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, model_type='gcn', device_str='cpu')
+    model, data, maps = run_pipeline(fake_csv, real_csv, tfidf_dim=512, hidden_dim=64, epochs=100, model_type='gat', device_str='cpu')
